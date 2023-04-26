@@ -17,6 +17,8 @@ struct LocalNotification {
     var subtitle: String?
     let body: String
     var bundleImageName: String?
+    var userInfo: [AnyHashable: Any]?
+    var categoryID: String?
     var timeInterval: TimeInterval?
     var dateComponents: DateComponents?
     let repeats: Bool
@@ -52,12 +54,22 @@ struct LocalNotification {
 
 extension LocalNotification {
     
-    init(_ notificationRequest: UNNotificationRequest) {
-        let trigger = notificationRequest.trigger as? UNTimeIntervalNotificationTrigger
+    init?(_ notificationRequest: UNNotificationRequest) {
         self.identifier = notificationRequest.identifier
-        self.scheduleType = trigger?.timeInterval != nil ? .interval : .calendar
         self.title = notificationRequest.content.title
         self.body = notificationRequest.content.body
-        self.repeats = notificationRequest.trigger?.repeats ?? false
+        self.userInfo = notificationRequest.content.userInfo
+        
+        if let timeIntervalTrigger = notificationRequest.trigger as? UNTimeIntervalNotificationTrigger {
+            self.scheduleType = .interval
+            self.timeInterval = timeIntervalTrigger.timeInterval
+            self.repeats = timeIntervalTrigger.repeats
+        } else if let calendarTrigger = notificationRequest.trigger as? UNCalendarNotificationTrigger {
+            self.scheduleType = .calendar
+            self.dateComponents = calendarTrigger.dateComponents
+            self.repeats = calendarTrigger.repeats
+        } else {
+            return nil
+        }
     }
 }

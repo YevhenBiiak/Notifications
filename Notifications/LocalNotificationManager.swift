@@ -9,7 +9,16 @@ import UIKit
 import NotificationCenter
 
 protocol LocalNotificationManagerDelegate: AnyObject {
-    func localNotificationManager(_ localNotificationManager: LocalNotificationManager, willChangePendingNotificationRequests notificationRequests: [UNNotificationRequest])
+    func localNotificationManager(_ localNotificationManager: LocalNotificationManager, willChangePendingNotification notifications: [LocalNotification])
+    func localNotificationManager(_ localNotificationManager: LocalNotificationManager, didReceiveResponseTo notification: LocalNotification)
+}
+
+enum NotificationCategory {
+    static let identifier: String = "Snooze"
+    enum Action: String {
+        case snooze10
+        case snooze60
+    }
 }
 
 class LocalNotificationManager: NSObject {
@@ -24,6 +33,7 @@ class LocalNotificationManager: NSObject {
     override init() {
         super.init()
         notificationCenter.delegate = self
+        registerActions()
     }
     
     func openSettings() {
@@ -59,6 +69,12 @@ class LocalNotificationManager: NSObject {
               identifier: localNotification.identifier + bundleImageName,
               url: url) {
             content.attachments = [attachment]
+        }
+        if let userInfo = localNotification.userInfo {
+            content.userInfo = userInfo
+        }
+        if let categoryID = localNotification.categoryID {
+            content.categoryIdentifier = categoryID
         }
         var trigger: UNNotificationTrigger? = nil
         
@@ -111,8 +127,27 @@ class LocalNotificationManager: NSObject {
     
     private func notifyDelegate() {
         getPendingRequests { requests in
-            self.delegate?.localNotificationManager(self, willChangePendingNotificationRequests: requests)
+            let notifications = requests.map(LocalNotification.init).compactMap({$0})
+            self.delegate?.localNotificationManager(self, willChangePendingNotification: notifications)
         }
+    }
+    
+    private func registerActions() {
+        let snooz10Action = UNNotificationAction(
+            identifier: NotificationCategory.Action.snooze10.rawValue,
+            title: "Snooze 10 seconds"
+        )
+        let snooz60Action = UNNotificationAction(
+            identifier: NotificationCategory.Action.snooze60.rawValue,
+            title: "Snooze 60 seconds"
+        )
+        let category = UNNotificationCategory(
+            identifier: NotificationCategory.identifier,
+            actions: [snooz10Action, snooz60Action],
+            intentIdentifiers: []
+        )
+        
+        notificationCenter.setNotificationCategories([category])
     }
 }
 
@@ -132,5 +167,34 @@ extension LocalNotificationManager: UNUserNotificationCenterDelegate {
         }
         
         notifyDelegate()
+    }
+    
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        guard let notification = LocalNotification(response.notification.request) else { return }
+        delegate?.localNotificationManager(self, didReceiveResponseTo: notification)
+        
+        switch NotificationCategory.Action(rawValue: response.actionIdentifier) {
+        case .snooze10:
+            let content = response.notification.request.content.mutableCopy() as! UNMutableNotificationContent
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 10, repeats: false)
+            let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
+            notificationCenter.add(request)
+            notifyDelegate()
+        case .snooze60:
+            let content = response.notification.request.content.mutableCopy() as! UNMutableNotificationContent
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 60, repeats: false)
+            let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
+            notificationCenter.add(request)
+            notifyDelegate()
+        case .none:
+            break
+        }
+        
+        // Always call the completion handler when done.
+        completionHandler()
     }
 }

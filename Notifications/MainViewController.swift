@@ -7,6 +7,11 @@
 
 import UIKit
 
+enum TargetViewController: String {
+    static let key = String(describing: Self.self)
+    case promotion, subscription
+}
+
 class MainViewController: UIViewController {
     
     @IBOutlet weak var clearButton: UIBarButtonItem!
@@ -47,28 +52,32 @@ class MainViewController: UIViewController {
             identifier: UUID().uuidString,
             title: "Interval Notification",
             body: "Lorem ipsum dolor sit amet, consectetur adipiscing elit",
-            timeInterval: 10,
+            timeInterval: 3,
             repeats: false
         )
         notification.subtitle = "Subtitle for Interval Notification"
         notification.bundleImageName = "iOS-15.jpg"
+        notification.userInfo = [TargetViewController.key: TargetViewController.subscription.rawValue]
+        notification.categoryID = NotificationCategory.identifier
         
         notificationManager.schedule(localNotification: notification)
     }
     
     @IBAction func calendarNotificationButtonTapped(_ sender: UIButton) {
         let dateComponents = Calendar.current.dateComponents(
-            [.year, .month, .day, .hour, .minute],
+            [.month, .day, .hour, .minute],
             from: datePicker.date
         )
         
-        let notification = LocalNotification(
+        var notification = LocalNotification(
             identifier: UUID().uuidString,
             title: "Calendar Notification",
             body: "Lorem ipsum dolor sit amet, consectetur adipiscing elit",
             dateComponents: dateComponents,
             repeats: true
         )
+        notification.bundleImageName = "iOS-15.jpg"
+        notification.userInfo = [TargetViewController.key: TargetViewController.promotion.rawValue]
         
         notificationManager.schedule(localNotification: notification)
     }
@@ -86,7 +95,7 @@ class MainViewController: UIViewController {
         }
         
         notificationManager.getPendingRequests { [weak self] requests in
-            self?.notifications = requests.map(LocalNotification.init)
+            self?.notifications = requests.compactMap(LocalNotification.init)
         }
     }
     
@@ -121,7 +130,12 @@ extension MainViewController: UITableViewDataSource {
         let notification = notifications[indexPath.row]
         
         cell.textLabel?.text = notification.title
-        cell.detailTextLabel?.text = notification.body
+        if notification.scheduleType == .interval {
+            cell.detailTextLabel?.text = "\(Int(notification.timeInterval!)) seconds"
+        } else if notification.scheduleType == .calendar {
+            let date = Calendar.current.date(from: notification.dateComponents!)
+            cell.detailTextLabel?.text = date?.formatted("MMMM d HH:mm")
+        }
         
         return cell
     }
@@ -151,7 +165,52 @@ extension MainViewController: UITableViewDelegate {
 
 extension MainViewController: LocalNotificationManagerDelegate {
     
-    func localNotificationManager(_ localNotificationManager: LocalNotificationManager, willChangePendingNotificationRequests notificationRequests: [UNNotificationRequest]) {
-        notifications = notificationRequests.map(LocalNotification.init)
+    func localNotificationManager(
+        _ localNotificationManager: LocalNotificationManager,
+        willChangePendingNotification notifications: [LocalNotification]
+    ) {
+        self.notifications = notifications
+    }
+
+    func localNotificationManager(
+        _ localNotificationManager: LocalNotificationManager,
+        didReceiveResponseTo notification: LocalNotification
+    ) {
+        guard let userInfo = notification.userInfo,
+              let value = userInfo[TargetViewController.key] as? String,
+              let targetViewController = TargetViewController(rawValue: value)
+        else { return }
+            
+        switch targetViewController {
+        case .promotion:
+            let viewController = UIStoryboard.main.instance(of: PromotionViewController.self)
+            present(viewController, animated: true)
+        case .subscription:
+            let viewController = UIStoryboard.main.instance(of: SubscriptionViewCotroller.self)
+            present(viewController, animated: true)
+        }
+    }
+}
+
+// MARK: - Extension UIStoryboard
+
+extension UIStoryboard {
+    static let main = UIStoryboard(name: "Main", bundle: nil)
+    
+    func instance<T: UIViewController>(of viewController: T.Type) -> T {
+        let identifier = String(describing: viewController.self)
+        return instantiateViewController(withIdentifier: identifier) as! T
+    }
+}
+
+// MARK: - Extension Date
+
+extension Date {
+    func formatted(_ format: String) -> String {
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = format
+        
+        return dateFormatter.string(from: self)
     }
 }
