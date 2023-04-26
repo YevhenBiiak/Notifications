@@ -44,26 +44,51 @@ class LocalNotificationManager: NSObject {
     }
     
     func schedule(localNotification: LocalNotification) {
+        
         let content = UNMutableNotificationContent()
         content.title = localNotification.title
         content.body = localNotification.body
         content.sound = .default
         
-        let triger = UNTimeIntervalNotificationTrigger(
-            timeInterval: localNotification.timeInterval,
-            repeats: localNotification.repeats
-        )
+        if let subtitle = localNotification.subtitle {
+            content.subtitle = subtitle
+        }
+        if let bundleImageName = localNotification.bundleImageName,
+           let url = Bundle.main.url(forResource: bundleImageName, withExtension: ""),
+           let attachment = try? UNNotificationAttachment(
+              identifier: localNotification.identifier + bundleImageName,
+              url: url) {
+            content.attachments = [attachment]
+        }
+        var trigger: UNNotificationTrigger? = nil
+        
+        if let timeInterval = localNotification.timeInterval,
+            localNotification.scheduleType == .interval {
+            
+            trigger = UNTimeIntervalNotificationTrigger(
+                timeInterval: timeInterval,
+                repeats: localNotification.repeats
+            )
+        } else if let dateComponents = localNotification.dateComponents,
+            localNotification.scheduleType == .calendar {
+            
+            trigger = UNCalendarNotificationTrigger(
+                dateMatching: dateComponents,
+                repeats: localNotification.repeats
+            )
+        }
+        
+        guard let trigger else { return }
         
         let request = UNNotificationRequest(
             identifier: localNotification.identifier,
             content: content,
-            trigger: triger
+            trigger: trigger
         )
         
         notificationCenter.add(request) { [weak self] _ in
             self?.notifyDelegate()
         }
-        
     }
     
     func getPendingRequests(completionHandler: @escaping ([UNNotificationRequest]) -> Void) {

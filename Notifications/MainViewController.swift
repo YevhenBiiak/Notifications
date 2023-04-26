@@ -1,5 +1,5 @@
 //
-//  ViewController.swift
+//  MainViewController.swift
 //  Notifications
 //
 //  Created by Yevhen Biiak on 25.04.2023.
@@ -7,11 +7,11 @@
 
 import UIKit
 
-class ViewController: UIViewController {
+class MainViewController: UIViewController {
     
     @IBOutlet weak var clearButton: UIBarButtonItem!
-    @IBOutlet weak var enableNotificationsButton: UIButton!
     @IBOutlet weak var notificationsStack: UIStackView!
+    @IBOutlet weak var datePicker: UIDatePicker!
     @IBOutlet weak var tableView: UITableView!
     
     var notificationManager: LocalNotificationManager!
@@ -26,48 +26,61 @@ class ViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         NotificationCenter.default.addObserver(self,
-            selector: #selector(sceneWillEnterForeground),
+            selector: #selector(checkAuthorizationStatus),
             name: .sceneWillEnterForeground,
             object: nil
         )
-        
+
         notificationManager = LocalNotificationManager()
         notificationManager.delegate = self
+        checkAuthorizationStatus()
     }
     
-    @IBAction func enableNotificationsButtonTapped(_ sender: UIButton) {
-        notificationManager.openSettings()
+    // MARK: - IBActions
+    
+    @IBAction func clearNotificationsButtonTapped(_ sender: Any) {
+        notificationManager.removeAllPendingRequests()
     }
     
     @IBAction func intervalNotificationButtonTapped(_ sender: UIButton) {
+        var notification = LocalNotification(
+            identifier: UUID().uuidString,
+            title: "Interval Notification",
+            body: "Lorem ipsum dolor sit amet, consectetur adipiscing elit",
+            timeInterval: 10,
+            repeats: false
+        )
+        notification.subtitle = "Subtitle for Interval Notification"
+        notification.bundleImageName = "iOS-15.jpg"
+        
+        notificationManager.schedule(localNotification: notification)
+    }
+    
+    @IBAction func calendarNotificationButtonTapped(_ sender: UIButton) {
+        let dateComponents = Calendar.current.dateComponents(
+            [.year, .month, .day, .hour, .minute],
+            from: datePicker.date
+        )
+        
         let notification = LocalNotification(
             identifier: UUID().uuidString,
-            title: "Lorem Title",
+            title: "Calendar Notification",
             body: "Lorem ipsum dolor sit amet, consectetur adipiscing elit",
-            timeInterval: 60,
+            dateComponents: dateComponents,
             repeats: true
         )
         
         notificationManager.schedule(localNotification: notification)
     }
     
-    @IBAction func calendarNotificationButtonTapped(_ sender: UIButton) {
-        
-    }
-    
-    @IBAction func clearNotificationsButtonTapped(_ sender: Any) {
-        notificationManager.removeAllPendingRequests()
-    }
-    
-    @objc private func sceneWillEnterForeground() {
+    @objc private func checkAuthorizationStatus() {
         notificationManager.requestAuthorization { [weak self] isGranted, error in
             if let error {
                 print(error.localizedDescription)
             } else if isGranted {
-                self?.enableNotificationsButton.isHidden = true
                 self?.notificationsStack.isHidden = false
             } else {
-                self?.enableNotificationsButton.isHidden = false
+                self?.presentAlertForOpenSettings()
                 self?.notificationsStack.isHidden = true
             }
         }
@@ -76,12 +89,28 @@ class ViewController: UIViewController {
             self?.notifications = requests.map(LocalNotification.init)
         }
     }
+    
+    private func presentAlertForOpenSettings() {
+        
+        let title = "\"Notifications\" Would Like to Send You Notifications"
+        let message = "Notifications may include alerts, sounds, and icon badges. These can be configured in Settings."
+       
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        let disallowAction = UIAlertAction(title: "Don't Allow", style: .default)
+        let allowAction = UIAlertAction(title: "Open Settings", style: .default) { [weak self] _ in
+            self?.notificationManager.openSettings()
+        }
+        alert.addAction(disallowAction)
+        alert.addAction(allowAction)
+        
+        present(alert, animated: true)
+    }
 }
 
 
 // MARK: - UITableViewDataSource
 
-extension ViewController: UITableViewDataSource {
+extension MainViewController: UITableViewDataSource {
     
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         notifications.count
@@ -100,7 +129,7 @@ extension ViewController: UITableViewDataSource {
 
 // MARK: - UITableViewDelegate
 
-extension ViewController: UITableViewDelegate {
+extension MainViewController: UITableViewDelegate {
     
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
@@ -120,7 +149,7 @@ extension ViewController: UITableViewDelegate {
 
 // MARK: - LocalNotificationManagerDelegate
 
-extension ViewController: LocalNotificationManagerDelegate {
+extension MainViewController: LocalNotificationManagerDelegate {
     
     func localNotificationManager(_ localNotificationManager: LocalNotificationManager, willChangePendingNotificationRequests notificationRequests: [UNNotificationRequest]) {
         notifications = notificationRequests.map(LocalNotification.init)
